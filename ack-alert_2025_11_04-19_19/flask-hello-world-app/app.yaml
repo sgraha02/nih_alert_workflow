@@ -1,0 +1,9 @@
+command: [
+  "flask",
+  "--app",
+  "app.py",
+  "run"
+]
+env:
+    - name: DATABRICKS_HTTP_PATH
+      value: "/sql/1.0/warehouses/148ccb90800933a1"
