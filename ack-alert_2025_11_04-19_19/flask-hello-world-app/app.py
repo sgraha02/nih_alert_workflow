@@ -6,7 +6,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-TABLE = "chipgraham.alert_workflow.active_sale_price_alerts"
+TABLE = "chipgraham.schema1.mock_gold_alerts_table"
 
 # Helper to get user email from Databricks SCIM /Me API
 def get_user_email_from_token(token):
@@ -40,7 +40,7 @@ def index():
 
     with get_connection(user_token) as conn:
         with conn.cursor() as cursor:
-            cursor.execute(f"SELECT property_id, timestamp, ack_flag FROM {TABLE} ORDER BY timestamp DESC")
+            cursor.execute(f"SELECT alert_key, window_start, acknowledged FROM {TABLE} ORDER BY window_start DESC")
             df = cursor.fetchall_arrow().to_pandas()
 
     return render_template_string('''
@@ -74,8 +74,8 @@ def index():
                             <thead class="bg-gray-100">
                                 <tr>
                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Select</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alert Key</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Window Start</th>
                                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acknowledged?</th>
                                 </tr>
                             </thead>
@@ -83,14 +83,14 @@ def index():
                                 {% for row in rows %}
                                 <tr class="hover:bg-blue-50 transition-colors duration-150">
                                     <td class="px-4 py-2">
-                                        {% if row.ack_flag == "N" %}
-                                        <input type="checkbox" name="property_ids" value="{{row.property_id}}" class="accent-blue-600 w-4 h-4 rounded border-gray-300 focus:ring-blue-500">
+                                        {% if row.acknowledged == "N" %}
+                                        <input type="checkbox" name="alert_keys" value="{{row.alert_key}}" class="accent-blue-600 w-4 h-4 rounded border-gray-300 focus:ring-blue-500">
                                         {% else %}<span class="text-gray-400">-</span>{% endif %}
                                     </td>
-                                    <td class="px-4 py-2 font-mono text-sm text-gray-700">{{row.property_id}}</td>
-                                    <td class="px-4 py-2 text-gray-600">{{row.timestamp}}</td>
+                                    <td class="px-4 py-2 font-mono text-sm text-gray-700">{{row.alert_key}}</td>
+                                    <td class="px-4 py-2 text-gray-600">{{row.window_start}}</td>
                                     <td class="px-4 py-2">
-                                        {% if row.ack_flag == "Y" %}
+                                        {% if row.acknowledged == "Y" %}
                                         <span class="inline-block px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-700">Yes</span>
                                         {% else %}
                                         <span class="inline-block px-2 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-700">No</span>
@@ -122,7 +122,7 @@ def index():
             error: '',
             submitAck() {
                 const form = document.getElementById('ackForm');
-                const checkboxes = form.querySelectorAll('input[name="property_ids"]:checked');
+                const checkboxes = form.querySelectorAll('input[name="alert_keys"]:checked');
                 const ids = Array.from(checkboxes).map(cb => cb.value);
                 if (ids.length === 0) {
                     this.error = 'Please select at least one alert to acknowledge.';
@@ -136,7 +136,7 @@ def index():
                         "Content-Type": "application/json",
                         "x-forwarded-access-token": "{{request.headers.get('x-forwarded-access-token', '')}}"
                     },
-                    body: JSON.stringify({property_ids: ids})
+                    body: JSON.stringify({alert_keys: ids})
                 })
                 .then(response => {
                     this.loading = false;
@@ -168,14 +168,14 @@ def acknowledge():
     user_email = get_user_email_from_token(user_token)
 
     if request.is_json:
-        property_ids = request.json.get("property_ids", [])
+        alert_keys = request.json.get("alert_keys", [])
     else:
-        property_ids = request.form.getlist("property_ids")
+        alert_keys = request.form.getlist("alert_keys")
 
-    if not property_ids:
+    if not alert_keys:
         return "No row ids provided.", 400
 
-    placeholders = ','.join(['?'] * len(property_ids))
+    placeholders = ','.join(['?'] * len(alert_keys))
     now = datetime.utcnow().isoformat()
 
     with get_connection(user_token) as conn:
@@ -183,13 +183,13 @@ def acknowledge():
             cursor.execute(
                 f"""
                 UPDATE {TABLE}
-                SET ack_flag = 'Y',
+                SET acknowledged = 'Y',
                     acknowledged_by = ?,
                     acknowledged_at = ?
-                WHERE property_id IN ({placeholders})
-                AND ack_flag = 'N'
+                WHERE alert_key IN ({placeholders})
+                AND acknowledged = 'N'
                 """,
-                (user_email, now, *property_ids)
+                (user_email, now, *alert_keys)
             )
 
     return redirect(url_for("index"))
