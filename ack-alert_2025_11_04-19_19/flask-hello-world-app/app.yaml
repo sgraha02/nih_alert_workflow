@@ -7,5 +7,3 @@ command: [
 env:
     - name: DATABRICKS_HTTP_PATH
       value: "/sql/1.0/warehouses/862f1d757f0424f7"
-    - name: DATABRICKS_HOST
-      value: "e2-demo-field-eng.cloud.databricks.com"
